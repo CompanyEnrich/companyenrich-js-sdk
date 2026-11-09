@@ -111,4 +111,14 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --tag latest --provenance
+        run: |
+          # npm hides a new version from reads while it processes it, so a push in
+          # that window passes the check above and then gets this harmless conflict.
+          status=0
+          output="$(npm publish --access public --tag latest --provenance 2>&1)" || status=$?
+          echo "$output"
+          if [ "$status" -ne 0 ] && grep -q 'previously staged version' <<<"$output"; then
+            echo "This version is already being processed by npm. Nothing to do."
+            exit 0
+          fi
+          exit "$status"
