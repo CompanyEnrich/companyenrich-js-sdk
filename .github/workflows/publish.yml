@@ -117,7 +117,7 @@ jobs:
           status=0
           output="$(npm publish --access public --tag latest --provenance 2>&1)" || status=$?
           echo "$output"
-          if [ "$status" -ne 0 ] && grep -q 'previously staged version' <<<"$output"; then
+          if [ "$status" -ne 0 ] && grep -qE 'previously (staged|published) version' <<<"$output"; then
             echo "This version is already being processed by npm. Nothing to do."
             exit 0
           fi
