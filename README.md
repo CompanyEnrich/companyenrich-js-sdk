@@ -48,12 +48,6 @@ const page = await client.companies.search({
 });
 console.log(page.items.length, page.nextCursor);
 
-// Natural-language search
-await client.companies.search({ semantic: { query: 'AI tools for hospitals' } });
-
-// Lookalike search
-await client.companies.search({ lookalike: { domains: ['stripe.com', 'adyen.com'] } });
-
 // Free count of the same query
 const { count } = await client.companies.count({ filter: { country: 'US' } });
 ```
@@ -70,6 +64,102 @@ const person = await client.people.enrich({ email: 'jane@stripe.com' });
 
 const lookup = await client.people.findEmail(person.id, { domain: 'stripe.com' });
 if (lookup.status === 'found') console.log(lookup.email, lookup.certainty);
+```
+
+## Semantic and lookalike search
+
+Semantic search finds companies or people from a plain-language description. Lookalike search finds companies similar to ones you already know. A company search can use either mode but not both, and either can be combined with `filter`. `searchAll` accepts the same arguments as `search`.
+
+| Search | Credits per result |
+| --- | --- |
+| Companies by filters | 1 |
+| Companies by description | 2 |
+| Lookalike companies | 5 |
+| People, in any mode | 2 |
+
+Paid expansions cost extra, and an empty result costs one result's base price. To try a query for free, pass the same arguments to `companies.preview()` or `people.preview()`, which need a plan with previews.
+
+### Companies by description
+
+By default, the API reads attributes such as location and size from your query and applies them. `interpretation` shows what it inferred.
+
+```ts
+const results = await client.companies.search({
+  semantic: { query: 'saas companies in Turkey' },
+  pageSize: 25,
+});
+
+for (const company of results.items) {
+  console.log(company.domain, company.description);
+}
+
+console.log(results.interpretation?.filter); // Inferred filters, such as the country
+console.log(results.interpretation?.boost); // Inferred ranking boosts, such as the category
+```
+
+Filters you pass take priority over inferred values of the same kind. Set `autoFilter: false` to turn inference off, or set `weight` (0 to 1) to control how much semantic similarity affects ranking.
+
+```ts
+const filtered = await client.companies.search({
+  semantic: { query: 'AI tools for hospitals', autoFilter: false },
+  filter: { country: 'US', employees: ['51-200', '201-500'] },
+  pageSize: 25,
+});
+```
+
+### Lookalike companies
+
+Pass 1 to 10 seed domains. Use `minScore` (0 to 1) to require a minimum similarity.
+
+```ts
+const similar = await client.companies.search({
+  lookalike: { domains: ['stripe.com', 'adyen.com'] },
+  filter: { country: 'US', employees: ['51-200', '201-500'] },
+  pageSize: 25,
+});
+
+for (const company of similar.items) {
+  console.log(company.domain, similar.scores?.[company.id]); // Scores are not probabilities
+}
+```
+
+Keep results in the order returned rather than sorting them by score.
+
+### People by description
+
+The API turns your query into person filters, such as role, seniority and country, plus a description of their current companies. `interpretation` shows both. A query it can't infer any filters from is rejected with an error, so include something concrete like a role or location.
+
+```ts
+const people = await client.people.search({
+  semantic: { query: 'marketing leaders at Series B fintech startups in London' },
+  pageSize: 25,
+});
+
+for (const person of people.items) {
+  console.log(person.name, person.position);
+}
+
+console.log(people.interpretation); // The inferred filters and company description
+```
+
+### People at matching companies
+
+Use `company` to find people by the kind of company they work at. These searches cover people at the 1,000 best-matching companies.
+
+```ts
+// Executives at companies matching a description
+const executives = await client.people.search({
+  filter: { seniority: ['c-suite', 'vp'] },
+  company: { semantic: { query: 'AI tools for hospitals' } },
+  pageSize: 25,
+});
+
+// Executives at companies similar to your best customers
+const similarTeams = await client.people.search({
+  filter: { seniority: ['c-suite', 'vp'] },
+  company: { lookalike: { domains: ['stripe.com', 'adyen.com'] } },
+  pageSize: 25,
+});
 ```
 
 ## Pagination
