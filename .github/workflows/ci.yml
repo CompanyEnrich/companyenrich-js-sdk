@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.8.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check that generated types match the OpenAPI spec
+        run: pnpm run generate && git diff --exit-code src/generated/openapi.ts
+
+      - name: Type-check
+        run: pnpm run type-check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build and validate the package
+        run: pnpm run check:package
+
+      - name: Smoke-test on Node.js 24
+        run: pnpm run smoke
+
+      - name: Switch to the oldest supported Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Smoke-test on Node.js 20
+        run: node scripts/smoke.mjs && node scripts/smoke.cjs

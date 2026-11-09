@@ -1,0 +1,72 @@
+{
+  "name": "@companyenrich/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript and JavaScript SDK for the CompanyEnrich API: company and people enrichment, search, lookalikes, and work emails.",
+  "license": "MIT",
+  "homepage": "https://github.com/CompanyEnrich/companyenrich-js-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CompanyEnrich/companyenrich-js-sdk.git"
+  },
+  "bugs": "https://github.com/CompanyEnrich/companyenrich-js-sdk/issues",
+  "keywords": [
+    "companyenrich",
+    "company-data",
+    "enrichment",
+    "people-search",
+    "company-search",
+    "lookalike",
+    "b2b-data",
+    "api",
+    "sdk",
+    "typescript"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "scripts": {
+    "generate": "openapi-typescript openapi/v2.json -o src/generated/openapi.ts",
+    "update-spec": "curl -fsSL https://api.companyenrich.com/openapi/v2.json -o openapi/v2.json && pnpm run generate",
+    "build": "tsdown",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:package": "pnpm run build && publint && attw --pack . --profile node16",
+    "smoke": "node scripts/smoke.mjs && node scripts/smoke.cjs",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@types/node": "^22.20.5",
+    "openapi-typescript": "^7.13.0",
+    "publint": "^0.3.25",
+    "tsdown": "^0.23.7",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

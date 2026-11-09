@@ -1,0 +1,114 @@
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'CompanyEnrich/companyenrich-js-sdk' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # Lets npm record build provenance for each release.
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - name: Install package managers
+        run: npm install --global npm@11.12.1 pnpm@11.8.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm run type-check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build and validate the package
+        run: pnpm run check:package
+
+      - name: Smoke-test the built package
+        run: pnpm run smoke
+
+      - name: Inspect the package contents
+        run: npm pack --dry-run
+
+      - name: Verify npm authentication
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::Set the NPM_TOKEN repository secret to an npm publishing token."
+            exit 1
+          fi
+          npm whoami --registry=https://registry.npmjs.org/
+
+      - name: Check whether this version needs publishing
+        id: release
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+
+          const { name, version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (name !== '@companyenrich/sdk' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+            throw new Error('This workflow publishes stable @companyenrich/sdk versions only.');
+          }
+
+          const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+            headers: { 'cache-control': 'no-cache' },
+            signal: AbortSignal.timeout(30000),
+          });
+          // A 404 means the package has never been published.
+          if (!response.ok && response.status !== 404) {
+            throw new Error(`Cannot check npm releases: HTTP ${response.status}. Publishing stopped.`);
+          }
+          const metadata = response.ok ? await response.json() : {};
+          const exists = Object.hasOwn(metadata.versions ?? {}, version);
+          const latest = metadata['dist-tags']?.latest;
+
+          if (!exists && latest) {
+            if (!/^\d+\.\d+\.\d+$/.test(latest)) {
+              throw new Error(`Cannot compare latest version ${latest}. Check npm's latest tag.`);
+            }
+            const previous = latest.split('.').map(Number);
+            const difference = version.split('.').map(Number)
+              .map((part, index) => part - previous[index]).find((part) => part !== 0) ?? 0;
+            if (difference <= 0) {
+              throw new Error(`Version ${version} must be newer than npm's latest version ${latest}.`);
+            }
+          }
+
+          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!exists}\n`);
+          const message = exists
+            ? `${name}@${version} is already published. Checks passed; publishing skipped.`
+            : `${name}@${version} is ready to publish.`;
+          console.log(message);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${message}\n`);
+          NODE
+
+      - name: Publish to npm
+        if: steps.release.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag latest --provenance
