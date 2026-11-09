@@ -1,6 +1,6 @@
 {
   "name": "@companyenrich/sdk",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Official TypeScript and JavaScript SDK for the CompanyEnrich API: company and people enrichment, search, lookalikes, and work emails.",
   "license": "MIT",
   "homepage": "https://github.com/CompanyEnrich/companyenrich-js-sdk#readme",
